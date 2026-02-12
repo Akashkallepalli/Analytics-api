@@ -1,0 +1,13 @@
+﻿node_modules/
+.env
+.env.local
+*.log
+logs/
+.DS_Store
+.vscode/
+.idea/
+dist/
+build/
+coverage/
+data/
+redis-data/
