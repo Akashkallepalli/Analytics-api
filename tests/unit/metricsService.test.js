@@ -86,6 +86,7 @@ describe('Metrics Service - Unit Tests', () => {
       const result = metricsService.getHourlyMetrics('2024-01-01', '2024-01-02');
       
       expect(result.length).toBeGreaterThan(0);
+      // const metric = result[0];
       const metric = result[0];
       
       expect(metric).toHaveProperty('timestamp');
