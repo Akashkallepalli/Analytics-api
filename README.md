@@ -1,227 +1,145 @@
 # Analytics API with Redis Caching and Rate Limiting
 
-## Project Overview
+A production-ready backend API service for aggregated analytics data. It features high-performance querying, a Redis **cache-aside** pattern for fast responses, and distributed token-bucket rate limiting for API protection. The service is secured with API key authentication, extensively tested, and fully containerized with Docker.
 
-A production-ready backend API service that serves aggregated analytics data with Redis caching for performance optimization and API rate limiting for resource protection. This project demonstrates advanced backend patterns, distributed caching strategies, and scalable API design.
-
-### Key Features
-
-- ✅ **High-Performance Analytics API** - Serve aggregated daily and hourly metrics
-- ✅ **Redis Caching** - Cache-aside pattern with configurable TTL
-- ✅ **Distributed Rate Limiting** - Token bucket algorithm with Redis state management
-- ✅ **API Key Authentication** - Secure protected endpoints
-- ✅ **Comprehensive Testing** - Unit and integration tests with Jest
-- ✅ **Docker Containerization** - Multi-service orchestration with docker-compose
-- ✅ **Production-Ready** - Error handling, input validation, graceful shutdown
-
----
+**Key Features**:
+- ✅ **High-Performance Analytics API** – Aggregated daily and hourly metrics endpoints (Express.js).
+- ✅ **Redis Caching** – Implements cache-aside pattern with configurable TTL for fast cache hits【27†L182-L186】.
+- ✅ **Distributed Rate Limiting** – Token bucket algorithm using Redis to handle multi-instance load【20†L85-L90】.
+- ✅ **API Key Authentication** – Protected endpoints require a secure `X-API-Key` header.
+- ✅ **Comprehensive Testing** – Unit and integration tests (Jest) ensure code quality.
+- ✅ **Docker Containerization** – Multi-service orchestration via Docker Compose.
+- ✅ **Production-Ready** – Includes error handling, input validation, and graceful shutdown.
 
 ## Architecture Overview
 
-### System Design
+The system routes client requests through rate-limiting and caching layers before reaching the metrics service:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                     Client Requests                          │
-└────────────────────────────────┬──────────────────────────────┘
-                                  │
-                    ┌─────────────▼──────────────┐
-                    │  Rate Limiting Middleware  │ (Redis)
-                    └─────────────┬──────────────┘
-                                  │
-                    ┌─────────────▼──────────────┐
-                    │  Cache Middleware          │ (Redis)
-                    │  Cache-Aside Pattern       │
-                    └─────────────┬──────────────┘
-                                  │
-                    ┌─────────────▼──────────────┐
-                    │  Express Routes            │
-                    │  Metrics Endpoints         │
-                    └─────────────┬──────────────┘
-                                  │
-                    ┌─────────────▼──────────────┐
-                    │  Metrics Service           │
-                    │  Mock Data Generation      │
-                    └─────────────┬──────────────┘
-                                  │
-                    ┌─────────────▼──────────────┐
-                    │  Cache Service             │
-                    │  Redis Client              │
-                    └────────────────────────────┘
+│                     Client Requests                         │
+└────────────────────────────────┬─────────────────────────────┘
+                                 │
+                   ┌─────────────▼──────────────┐
+                   │  Rate Limiting Middleware  │ (Redis)
+                   └─────────────┬──────────────┘
+                                 │
+                   ┌─────────────▼──────────────┐
+                   │  Cache Middleware          │ (Redis)
+                   │  (Cache-Aside Pattern)     │
+                   └─────────────┬──────────────┘
+                                 │
+                   ┌─────────────▼──────────────┐
+                   │  Express Routes            │
+                   │  (Metrics Endpoints)       │
+                   └─────────────┬──────────────┘
+                                 │
+                   ┌─────────────▼──────────────┐
+                   │  Metrics Service           │
+                   │  (Mock Data Generation)    │
+                   └─────────────┬──────────────┘
+                                 │
+                   ┌─────────────▼──────────────┐
+                   │  Redis                      │
+                   │  (Cache & Rate Limit Store) │
+                   └────────────────────────────┘
 ```
+
+- **Rate Limiting Middleware** checks/increments tokens in Redis per client (by API key or IP).  
+- **Cache Middleware** checks Redis for precomputed metrics. On a *miss*, the service computes data and stores it in Redis【27†L182-L186】. On a *hit*, cached data is returned immediately.  
+- **Metrics Service** generates or fetches analytics data (mocked for this project).  
+- **Redis** acts as the backing store for both caching and rate-limiter state. Redis is an in-memory datastore (known for caching) that reduces load on primary data sources【27†L143-L144】.
 
 ### Directory Structure
 
 ```
 analytics-api/
 ├── src/
-│   ├── app.js                          # Main application entry point
+│   ├── app.js                          # Main Express app setup
 │   ├── routes/
 │   │   └── metrics.js                  # Metrics API routes
 │   ├── services/
 │   │   ├── metricsService.js           # Mock metrics data generation
-│   │   └── cacheService.js             # Cache operations
+│   │   └── cacheService.js             # Redis cache operations
 │   ├── middleware/
 │   │   ├── authMiddleware.js           # API key authentication
-│   │   ├── rateLimitMiddleware.js       # Rate limiting middleware
-│   │   └── cacheMiddleware.js           # Caching middleware
+│   │   ├── rateLimitMiddleware.js      # Rate-limiting middleware
+│   │   └── cacheMiddleware.js          # Caching middleware (cache-aside)
 │   └── utils/
-│       ├── validators.js                # Input validation utilities
-│       └── errorHandler.js              # Centralized error handling
+│       ├── validators.js              # Input validation utilities
+│       └── errorHandler.js            # Centralized error handler
 ├── tests/
 │   ├── unit/
-│   │   ├── metricsService.test.js      # Metrics service tests
-│   │   ├── cacheService.test.js        # Cache service tests
-│   │   └── rateLimiter.test.js         # Rate limiter tests
+│   │   ├── metricsService.test.js      # Unit tests for metrics service
+│   │   ├── cacheService.test.js        # Unit tests for cache logic
+│   │   └── rateLimiter.test.js         # Unit tests for rate limiting
 │   └── integration/
-│       └── api.test.js                 # API integration tests
-├── .env.example                        # Environment variables template
-├── Dockerfile                          # Docker image build instructions
-├── docker-compose.yml                  # Docker Compose configuration
-├── package.json                        # Dependencies and scripts
-├── .gitignore                          # Git ignore rules
-└── README.md                           # This file
+│       └── api.test.js                 # End-to-end API tests
+├── .env.example                       # Template for environment variables
+├── Dockerfile                         # Docker image build instructions
+├── docker-compose.yml                 # Docker Compose configuration
+├── package.json                       # Dependencies & scripts
+├── .gitignore                         # Git ignore rules
+└── README.md                          # (This documentation)
 ```
-
----
 
 ## Prerequisites
 
-### System Requirements
+Ensure your system meets the following requirements:
 
-- **OS**: Windows 10/11, macOS, or Linux
-- **RAM**: Minimum 4GB, recommended 8GB+
-- **Disk Space**: 2GB for dependencies and Docker images
-
-### Required Software
-
-- **Node.js**: v16.x or higher
-  - Download: https://nodejs.org/
-  - Verify: `node --version`
-
-- **Docker Desktop**: Latest version
-  - Download: https://www.docker.com/products/docker-desktop
-  - Verify: `docker --version`
-
-- **Git**: Latest version
-  - Download: https://git-scm.com/
-  - Verify: `git --version`
-
-- **PowerShell** (Windows): 5.1 or higher (pre-installed on Windows 10+)
-
----
+- **OS**: Windows 10/11, macOS, or Linux (4GB RAM minimum; 8GB+ recommended).  
+- **Node.js**: v16.x or higher (install from [nodejs.org](https://nodejs.org/); verify with `node --version`).  
+- **Docker & Docker Compose**: Latest Docker Desktop (download from [docker.com](https://www.docker.com/products/docker-desktop); verify with `docker --version` and `docker-compose --version`).  
+- **Git**: Latest version (download from [git-scm.com](https://git-scm.com/); verify with `git --version`).  
+- **PowerShell** (Windows only): v5.1 or higher (pre-installed on Windows 10+).  
 
 ## Quick Start Guide
 
-### Step 1: Clone or Create Project
+Follow these steps to get the API running locally:
 
-```powershell
-# Create project directory
-$projectRoot = "C:\Users\$env:USERNAME\Desktop\analytics-api"
-New-Item -ItemType Directory -Path $projectRoot -Force
-cd $projectRoot
-
-# Initialize Git repository
-git init
-git config user.name "Your Name"
-git config user.email "your.email@example.com"
-```
-
-### Step 2: Create Project Structure
-
-```powershell
-# Create all directories
-$directories = @(
-    "src", "src\routes", "src\services", "src\middleware", "src\utils",
-    "tests", "tests\unit", "tests\integration"
-)
-
-foreach ($dir in $directories) {
-    New-Item -ItemType Directory -Path $dir -Force
-}
-
-# Create all necessary files
-$files = @(
-    "package.json", ".env.example", ".gitignore", "Dockerfile",
-    "docker-compose.yml", "README.md", "src\app.js",
-    "src\routes\metrics.js", "src\services\metricsService.js",
-    "src\services\cacheService.js", "src\middleware\authMiddleware.js",
-    "src\middleware\rateLimitMiddleware.js", "src\middleware\cacheMiddleware.js",
-    "src\utils\errorHandler.js", "src\utils\validators.js",
-    "tests\unit\metricsService.test.js", "tests\unit\cacheService.test.js",
-    "tests\unit\rateLimiter.test.js", "tests\integration\api.test.js"
-)
-
-foreach ($file in $files) {
-    New-Item -ItemType File -Path $file -Force
-}
-
-Write-Host "✓ Project structure created" -ForegroundColor Green
-```
-
-### Step 3: Install Dependencies
-
-```powershell
-cd $projectRoot
-
-# Install npm dependencies
-npm install
-
-Write-Host "✓ Dependencies installed" -ForegroundColor Green
-```
-
-### Step 4: Configure Environment Variables
-
-```powershell
-# Copy .env.example to .env
-Copy-Item ".env.example" ".env"
-
-# Edit .env with your settings (optional)
-notepad .env
-```
-
-### Step 5: Start Application with Docker Compose
-
-```powershell
-# Build and start services
-docker-compose up --build -d
-
-# Check service status
-docker-compose ps
-
-# View logs
-docker-compose logs -f analytics-api
-
-Write-Host "✓ Services started successfully" -ForegroundColor Green
-```
-
-### Step 6: Verify Application
-
-```powershell
-# Test health endpoint
-Invoke-WebRequest -Uri "http://localhost:8080/health"
-
-# Test metrics endpoint
-Invoke-WebRequest -Uri "http://localhost:8080/api/v1/metrics/daily"
-```
-
----
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/Akashkallepalli/Analytics-api.git
+   cd Analytics-api
+   ```
+2. **Install dependencies**:
+   ```bash
+   npm install
+   ```
+3. **Configure environment variables**:
+   ```bash
+   cp .env.example .env
+   ```
+   Edit `.env` as needed (set your `API_KEY`, Redis URL, etc.). Do **not** commit this file to source control.
+4. **Start services with Docker Compose**:
+   ```bash
+   docker-compose up --build -d
+   docker-compose ps
+   ```
+   This builds the Docker images and starts the `analytics-api` and `redis` containers in detached mode.  
+5. **Verify the application**:
+   - Health check:  
+     ```bash
+     curl http://localhost:8080/health
+     ```
+     Expect a JSON status response (see below).  
+   - Metrics endpoint:  
+     ```bash
+     curl http://localhost:8080/api/v1/metrics/daily
+     ```
+     You should receive sample daily metrics data.  
 
 ## API Documentation
 
-### Base URL
-
-```
-http://localhost:8080/api/v1
-```
+**Base URL**: `http://localhost:8080/api/v1`
 
 ### Authentication
 
-Protected endpoints require API Key authentication via the `X-API-Key` header:
-
+Protected endpoints (like cache invalidation) require an API key via the `X-API-Key` header. For example:
 ```
 X-API-Key: your_super_secret_api_key_123
 ```
+Use the key defined in your `.env`.
 
 ### Endpoints
 
@@ -229,8 +147,13 @@ X-API-Key: your_super_secret_api_key_123
 
 ```
 GET /health
+```
 
-Response (200):
+- **Description**: Returns basic service health info.  
+- **Authentication**: Not required.  
+
+**Response (200 OK)**:
+```json
 {
   "status": "healthy",
   "timestamp": "2026-02-11T18:30:00.000Z",
@@ -243,12 +166,15 @@ Response (200):
 
 ```
 GET /metrics/daily?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD
+```
 
-Query Parameters:
-  - start_date (optional): Filter start date (YYYY-MM-DD)
-  - end_date (optional): Filter end date (YYYY-MM-DD)
+- **Description**: Returns aggregated daily metrics in the given date range (inclusive). If no dates are provided, returns all available data.  
+- **Query Parameters**:
+  - `start_date` (optional): Filter start date (format `YYYY-MM-DD`).  
+  - `end_date` (optional): Filter end date (format `YYYY-MM-DD`).  
 
-Response (200):
+**Response (200 OK)**:
+```json
 {
   "success": true,
   "data": [
@@ -266,24 +192,23 @@ Response (200):
   "timestamp": "2026-02-11T18:30:00.000Z",
   "cached": false
 }
-
-Headers:
-  - X-Cache-Status: HIT|MISS (indicates cache status)
-  - X-RateLimit-Limit: 10 (requests per window)
-  - X-RateLimit-Remaining: 8 (remaining requests)
-  - X-RateLimit-Reset: 1644591000 (reset timestamp)
 ```
+- **Response Headers** include:
+  - `X-Cache-Status`: `HIT` or `MISS` (cache lookup result).  
+  - `X-RateLimit-Limit`: Configured request limit (e.g. 10).  
+  - `X-RateLimit-Remaining`: Remaining requests in window.  
+  - `X-RateLimit-Reset`: UNIX timestamp when rate-limit resets.
 
 #### 3. Get Hourly Metrics
 
 ```
 GET /metrics/hourly?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD
+```
 
-Query Parameters:
-  - start_date (optional): Filter start date (YYYY-MM-DD)
-  - end_date (optional): Filter end date (YYYY-MM-DD)
+- **Description**: Returns hourly metrics entries. Similar parameters as daily metrics.  
 
-Response (200):
+**Response (200 OK)**:
+```json
 {
   "success": true,
   "data": [
@@ -300,13 +225,19 @@ Response (200):
   "cached": false
 }
 ```
+- **Headers**: Same caching and rate-limit headers as above.
 
 #### 4. Get Metrics Summary
 
 ```
 GET /metrics/summary?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD
+```
 
-Response (200):
+- **Description**: Returns a summary (totals and averages) of metrics over the date range.  
+- **Query Parameters**: `start_date` and `end_date` (optional) as above.
+
+**Response (200 OK)**:
+```json
 {
   "success": true,
   "data": {
@@ -324,22 +255,27 @@ Response (200):
   "cached": false
 }
 ```
+- **Headers**: Same as above (cache & rate-limit info).
 
 #### 5. Invalidate Cache
 
 ```
 POST /cache/invalidate
-Headers:
-  X-API-Key: your_super_secret_api_key_123
+```
 
-Response (200):
+- **Description**: Clears all cached metrics data from Redis (flushes keys).  
+- **Authentication**: **Required**. Use header `X-API-Key`.  
+
+**Response (200 OK)**:
+```json
 {
   "success": true,
   "message": "Cache invalidated successfully",
   "keysDeleted": 42
 }
-
-Error Response (401):
+```
+**Error (401 Unauthorized)** (invalid/missing API key):
+```json
 {
   "success": false,
   "error": {
@@ -351,18 +287,17 @@ Error Response (401):
 
 ### HTTP Status Codes
 
-| Code | Meaning | Usage |
-|------|---------|-------|
-| 200 | OK | Successful request |
-| 400 | Bad Request | Invalid input parameters |
-| 401 | Unauthorized | Missing or invalid API key |
-| 404 | Not Found | Endpoint not found |
-| 429 | Too Many Requests | Rate limit exceeded |
-| 500 | Internal Server Error | Server error |
-| 503 | Service Unavailable | Redis unavailable |
+| Code | Meaning                  | Typical Usage                          |
+|------|--------------------------|----------------------------------------|
+| 200  | OK                       | Successful request                     |
+| 400  | Bad Request              | Invalid input parameters               |
+| 401  | Unauthorized             | Missing/invalid API key                |
+| 404  | Not Found                | Invalid endpoint                       |
+| 429  | Too Many Requests        | Rate limit exceeded                    |
+| 500  | Internal Server Error    | Unexpected server-side error           |
+| 503  | Service Unavailable      | Dependency (e.g. Redis) is unavailable |
 
-### Error Responses
-
+**Error Response Format (JSON)** (example for bad input):
 ```json
 {
   "success": false,
@@ -374,183 +309,133 @@ Error Response (401):
 }
 ```
 
----
-
 ## Caching Strategy
 
-### Cache-Aside Pattern
+This API uses the **cache-aside** pattern【27†L182-L186】 to minimize data fetch latency:
 
-The application implements the cache-aside pattern for optimal performance:
+1. A request for metrics arrives.
+2. The **Cache Middleware** generates a unique cache key (e.g. `metrics:daily:start_date=2023-01-01&end_date=2023-12-31`) and checks Redis.
+3. **Cache Hit:** If the key exists, return the cached data immediately (fast response).
+4. **Cache Miss:** If not in Redis, fetch data from the metrics service, then store the result in Redis with a TTL (time-to-live) and return it.
+5. **Cache Invalidation:** The `/cache/invalidate` endpoint can be used to clear all `metrics:*` keys (e.g. after data changes).
 
-**Process Flow**:
-1. Request arrives for metrics endpoint
-2. Check Redis cache using generated cache key
-3. If cache hit: Return cached data immediately
-4. If cache miss:
-   - Fetch data from metricsService
-   - Store in Redis with TTL
-   - Return to client
-5. On cache invalidation: Clear all `metrics:*` keys
+- **Cache Key Pattern:** `metrics:{endpoint}:{query_params}`  
+  *Example:* `metrics:daily:start_date=2023-01-01&end_date=2023-12-31`.
+- **TTL:** Default 300 seconds (5 minutes), configurable via `CACHE_TTL_SECONDS` in `.env`. 
 
-**Cache Keys**:
-- Pattern: `metrics:{endpoint}:{query_params}`
-- Example: `metrics:daily:start_date=2023-01-01&end_date=2023-12-31`
-
-**Configuration**:
-- TTL (Time-To-Live): 300 seconds (5 minutes)
-- Configurable via `CACHE_TTL_SECONDS` environment variable
-
----
+Redis is an in-memory datastore optimized for caching【27†L143-L144】. By loading data into Redis on demand, subsequent requests are served in milliseconds instead of querying the (mock) data source.
 
 ## Rate Limiting
 
-### Token Bucket Algorithm
+The API enforces per-client rate limits using a **token bucket** algorithm stored in Redis (making it distributed across instances):
 
-Distributed rate limiting using Redis for multi-instance scalability:
+- **Limits:** Default 10 requests per 60 seconds (configurable with `RATE_LIMIT_REQUESTS` and `RATE_LIMIT_WINDOW_SECONDS`).  
+- **Client Identification:** If an API key is provided, it identifies the client; otherwise the client’s IP address is used.  
+- **Token Bucket:** Each client has a bucket with a set number of tokens. Tokens are refilled at a steady rate. On each request, one token is consumed. If tokens remain, the request is allowed; if not, the client receives a `429 Too Many Requests`. This follows the standard token bucket mechanism【20†L85-L90】.
+- **Redis Usage:** Token counts and timestamps are stored in Redis, enabling consistent limits across multiple API instances. Pipelining is used to minimize latency.
+- **Response Headers:** Every API response includes rate-limit headers:  
+  - `X-RateLimit-Limit`: Maximum requests per window.  
+  - `X-RateLimit-Remaining`: Requests left in current window.  
+  - `X-RateLimit-Reset`: UNIX time when the window resets.  
 
-**Configuration**:
-- Default Limit: 10 requests per 60 seconds
-- Configurable via:
-  - `RATE_LIMIT_REQUESTS` (default: 10)
-  - `RATE_LIMIT_WINDOW_SECONDS` (default: 60)
-
-**Client Identification**:
-- Authenticated: Uses API Key from `X-API-Key` header
-- Unauthenticated: Uses client IP address
-
-**Response Headers** (on rate limit):
+**Example (on limit reached):**
 ```
+HTTP/1.1 429 Too Many Requests
 X-RateLimit-Limit: 10
 X-RateLimit-Remaining: 0
 Retry-After: 45
 ```
 
----
-
 ## Running Tests
 
-### Unit Tests
+- **Unit Tests (Jest)**:  
+  ```bash
+  npm test              # Run all unit tests
+  npm run test:watch    # Watch mode (rerun on changes)
+  npm test -- --coverage # Generate coverage report
+  ```
+- **Integration Tests:**  
+  ```bash
+  npm run test:integration            # Run integration tests
+  npm test -- tests/integration/api.test.js # Run a specific test file
+  ```
 
-```powershell
-# Run all unit tests
-npm run test
+Make sure the services are running (`docker-compose up -d`) before running integration tests.
 
-# Watch mode (auto-rerun on changes)
-npm run test:watch
+## Manual Testing with cURL
 
-# With coverage report
-npm run test -- --coverage
-```
+You can manually invoke API endpoints using `curl` (replace with appropriate tools or scripts as needed):
 
-### Integration Tests
+```bash
+# Get all daily metrics
+curl http://localhost:8080/api/v1/metrics/daily
 
-```powershell
-# Run integration tests only
-npm run test:integration
-
-# Run specific test file
-npm run test -- tests/integration/api.test.js
-```
-
-### Manual Testing with cURL
-
-```powershell
-# Get daily metrics
-Invoke-WebRequest -Uri "http://localhost:8080/api/v1/metrics/daily"
-
-# Get metrics with date range
-Invoke-WebRequest -Uri "http://localhost:8080/api/v1/metrics/daily?start_date=2023-01-01&end_date=2023-01-31"
+# Get daily metrics for a date range
+curl "http://localhost:8080/api/v1/metrics/daily?start_date=2023-01-01&end_date=2023-01-31"
 
 # Invalidate cache (requires API key)
-Invoke-WebRequest -Uri "http://localhost:8080/api/v1/cache/invalidate" `
-  -Method POST `
-  -Headers @{"X-API-Key" = "your_super_secret_api_key_123"}
+curl -X POST http://localhost:8080/api/v1/cache/invalidate \
+     -H "X-API-Key: your_super_secret_api_key_123"
 
-# Test rate limiting (make 15 rapid requests)
-for ($i = 0; $i -lt 15; $i++) {
-    Invoke-WebRequest -Uri "http://localhost:8080/api/v1/metrics/daily" -ErrorAction Continue
-}
+# Test rate limiting by making 15 rapid requests
+for i in {1..15}; do
+  curl -i http://localhost:8080/api/v1/metrics/daily || true
+done
 ```
 
----
+The above loop will quickly hit the rate limit (after 10 requests by default) and return HTTP 429.
 
 ## Docker Commands
 
-### Build and Start
+### Build and Start Services
 
-```powershell
-# Build images and start services
-docker-compose up --build -d
-
-# Start services (without rebuild)
-docker-compose up -d
-
-# View logs
-docker-compose logs -f
-
-# View API logs only
-docker-compose logs -f analytics-api
-
-# View Redis logs only
-docker-compose logs -f redis
+```bash
+docker-compose up --build -d      # Build images and start services in background
+docker-compose up -d              # Start services (no rebuild)
+docker-compose ps                 # Check running containers
+docker-compose logs -f            # Stream all logs
+docker-compose logs -f analytics-api  # Stream only API logs
+docker-compose logs -f redis         # Stream only Redis logs
 ```
 
 ### Monitoring and Debugging
 
-```powershell
-# Check service status
-docker-compose ps
-
-# Execute command in container
-docker-compose exec analytics-api npm test
-
-# Access Redis CLI
-docker-compose exec redis redis-cli
-
-# View Docker resource usage
-docker stats
-
-# Inspect service logs with tail
-docker-compose logs --tail=100 analytics-api
+```bash
+docker-compose ps               # List running services
+docker-compose exec analytics-api npm test   # Run tests inside container
+docker-compose exec redis redis-cli         # Access Redis CLI
+docker stats                    # View real-time Docker resource usage
+docker-compose logs --tail=100 analytics-api # View last 100 lines of API logs
 ```
 
 ### Cleanup
 
-```powershell
-# Stop services
-docker-compose down
-
-# Stop and remove volumes
-docker-compose down -v
-
-# Remove all images
-docker-compose down --rmi all
-
-# Clean up unused resources
-docker system prune -a
+```bash
+docker-compose down           # Stop and remove containers (keep volumes)
+docker-compose down -v        # Also remove named volumes
+docker-compose down --rmi all # Remove containers, networks, and images
+docker system prune -a        # Remove all unused containers, networks, images, and build cache
 ```
-
----
 
 ## Environment Variables
 
-### .env Configuration
+Use the `.env.example` as a template. Key variables include:
 
 ```
-# Application Settings
+# Application
 NODE_ENV=production
 PORT=8080
 
-# Redis Configuration
+# Redis
 REDIS_HOST=redis
 REDIS_PORT=6379
 REDIS_PASSWORD=
 REDIS_URL=redis://redis:6379
 
-# Cache Configuration
+# Cache
 CACHE_TTL_SECONDS=300
 
-# Rate Limiting Configuration
+# Rate Limiting
 RATE_LIMIT_REQUESTS=10
 RATE_LIMIT_WINDOW_SECONDS=60
 
@@ -558,134 +443,83 @@ RATE_LIMIT_WINDOW_SECONDS=60
 API_KEY=your_super_secret_api_key_123
 ```
 
-### Important Notes
-
-- Never commit `.env` file to version control
-- Use `.env.example` as template for team members
-- Store sensitive values in CI/CD secrets
-- Rotate API keys regularly in production
-
----
+**Important:** Never commit your actual `.env` file or secret keys to version control. Use CI/CD secrets or environment config for sensitive values.
 
 ## Performance Benchmarks
 
-### Caching Impact
+- **Cache Impact:**  
+  - **First request (cache MISS):** ~500 ms response time (data fetched and cached).  
+  - **Subsequent requests (cache HIT):** ~5–10 ms response (50–100× faster) due to in-memory Redis lookup.  
 
-**First Request (Cache Miss)**:
-- Response Time: ~500ms
-- Cache Status: MISS
+- **Rate Limiting Overhead:**  
+  - Adds \<1 ms per request. Redis pipelining is used for atomic token updates.
 
-**Subsequent Requests (Cache Hit)**:
-- Response Time: ~5-10ms
-- Cache Status: HIT
-- **Performance Improvement**: ~50-100x faster
-
-### Rate Limiting Overhead
-
-- Per-request overhead: <1ms
-- Redis operations: Optimized with pipelining
-
----
+Overall, Redis caching dramatically improves response times for repeated queries, while rate limiting introduces negligible latency.
 
 ## Troubleshooting
 
-### Redis Connection Issues
+**Redis Connection Issues**:
+- Check that the Redis container is running: `docker ps | grep redis`.
+- View Redis logs: `docker-compose logs redis`.
+- Test connectivity: `docker-compose exec redis redis-cli ping` (should reply `PONG`).
+- Restart Redis if needed: `docker-compose restart redis`.
 
-```powershell
-# Check if Redis container is running
-docker ps | findstr redis
+**API Not Starting**:
+- Check logs for errors: `docker-compose logs analytics-api`.
+- Verify port availability (`8080` by default):  
+  - On Windows: `netstat -ano | findstr :8080` (then kill the process if needed).  
+  - On Linux/macOS: `lsof -i :8080`.
+- If an old process is stuck, kill it and restart:  
+  ```bash
+  docker-compose down
+  docker-compose up --build -d
+  ```
 
-# View Redis logs
-docker-compose logs redis
+**Tests Failing**:
+- Ensure all services are running (`docker-compose up -d`) before integration tests.  
+- Try cleaning dependencies:  
+  ```bash
+  rm -rf node_modules
+  npm install
+  npm test -- --verbose
+  ```
+- Run specific failing test for debugging:  
+  ```bash
+  npm test -- tests/unit/metricsService.test.js
+  ```
 
-# Test Redis connection
-docker-compose exec redis redis-cli ping
-
-# Restart Redis
-docker-compose restart redis
-```
-
-### API Not Starting
-
-```powershell
-# Check API logs
-docker-compose logs analytics-api
-
-# Verify port 8080 is available
-netstat -ano | findstr :8080
-
-# Kill process using port 8080
-taskkill /PID <PID> /F
-
-# Rebuild and restart
-docker-compose down
-docker-compose up --build -d
-```
-
-### Tests Failing
-
-```powershell
-# Ensure services are running
-docker-compose up -d
-
-# Clear node_modules and reinstall
-rm -Recurse node_modules
-npm install
-
-# Run tests with verbose output
-npm test -- --verbose
-
-# Run specific test file
-npm test -- tests/unit/metricsService.test.js
-```
-
-### High Memory Usage
-
-```powershell
-# Check Docker resource usage
-docker stats
-
-# Limit container memory
-# Edit docker-compose.yml:
-# analytics-api:
-#   mem_limit: 512m
-#   memswap_limit: 512m
-
-# Restart services
-docker-compose restart
-```
-
----
+**High Memory Usage**:
+- Monitor usage: `docker stats`.  
+- You can limit container memory in `docker-compose.yml` (e.g. `mem_limit: 512m`). Then restart the services.
 
 ## Production Deployment
 
-### Preparing for Production
+For a production-grade deployment, consider the following:
 
-1. **Environment Configuration**:
-   - Set `NODE_ENV=production`
-   - Use strong, unique API key
-   - Configure Redis persistence
-   - Set appropriate cache TTLs
+- **Environment Configuration**:  
+  - Set `NODE_ENV=production`.  
+  - Use a strong, unique `API_KEY`.  
+  - Enable Redis persistence (AOF/RDB) for durability.  
+  - Tune cache TTLs appropriately.
 
-2. **Security Hardening**:
-   - Enable HTTPS/TLS
-   - Implement request signing
-   - Use API gateway for rate limiting
-   - Enable CORS if needed
+- **Security Hardening**:  
+  - Enable HTTPS/TLS (e.g. behind a load balancer or reverse proxy).  
+  - Consider request signing or OAuth if needed.  
+  - Use an API gateway for global rate limiting and CORS management.  
+  - Limit exposed endpoints as necessary.
 
-3. **Scaling**:
-   - Deploy multiple API instances
-   - Use load balancer (nginx, HAProxy)
-   - Configure Redis replication
-   - Monitor with logging and metrics
+- **Scaling**:  
+  - Run multiple instances of the `analytics-api` service behind a load balancer (e.g. NGINX, HAProxy).  
+  - Use Redis clustering or replication for high availability.  
+  - Employ centralized logging and monitoring (e.g. ELK, Prometheus).  
 
-4. **Monitoring**:
-   - Set up health check endpoints
-   - Configure alerting
-   - Track performance metrics
-   - Monitor Redis memory
+- **Monitoring**:  
+  - Keep the `/health` endpoint for health checks.  
+  - Track key metrics (throughput, error rates, latencies).  
+  - Set up alerts on error rates or if Redis memory runs low.  
+  - Use log aggregation to debug issues across instances.
 
-### Docker Compose Production
+### Docker Compose (Production Example)
 
 ```yaml
 version: '3.8'
@@ -710,81 +544,58 @@ services:
     mem_limit: 256m
 ```
 
----
+Deploy this with `docker-compose up -d`. Adjust resources and replicas as needed for your environment.
 
 ## Contributing
 
-### Code Style
+Contributions are welcome! Please follow these guidelines:
 
-- Use ESLint for code consistency
-- Follow Express.js best practices
-- Comment complex logic
-- Use meaningful variable names
-
-### Testing Requirements
-
-- Minimum 80% code coverage
-- All public functions tested
-- Integration tests for API flows
-- Test error scenarios
-
-### Commit Guidelines
-
-- Use descriptive commit messages
-- Reference issue numbers
-- One feature per commit
-- Test before committing
-
----
+- **Code Style**: Use ESLint (Airbnb/Prettier rules) for consistency. Follow Express.js best practices (middleware ordering, async handlers, etc.). Comment complex logic and use meaningful variable names.  
+- **Testing**: Maintain ≥80% code coverage. Write unit tests for all new public functions and integration tests for any new endpoints. Test error and edge cases (invalid input, unauthorized access, etc.).  
+- **Commits**: Write descriptive commit messages. Reference issue numbers when applicable. Follow the “one feature per commit” rule. Always run tests before committing.
 
 ## License
 
-MIT License - See LICENSE file for details
-
----
+This project is licensed under the **MIT License** – see the [LICENSE](LICENSE) file for details.
 
 ## Support
 
-For issues and questions:
+If you encounter any issues or have questions:
 
-1. Check existing GitHub issues
-2. Review troubleshooting section above
-3. Consult API documentation
-4. Review error logs in Docker
-
----
+1. Check existing [GitHub issues](https://github.com/Akashkallepalli/Analytics-api/issues) to see if someone reported the problem.  
+2. Review the **Troubleshooting** section above.  
+3. Consult this documentation and the API logs (`docker-compose logs analytics-api`).  
+4. If needed, open a new issue or pull request on GitHub.
 
 ## Changelog
 
 ### Version 1.0.0 (2026-02-12)
 
 **Features**:
-- Initial release
-- Daily and hourly metrics endpoints
-- Redis cache-aside pattern
-- Token bucket rate limiting
-- API key authentication
-- Comprehensive testing suite
-- Docker containerization
+- Initial release with daily and hourly metrics endpoints.  
+- Integrated Redis cache-aside pattern for fast responses.  
+- Token bucket rate limiting (Redis-backed) for API protection.  
+- API key authentication for protected routes.  
+- Comprehensive unit and integration tests (Jest).  
+- Dockerized setup for easy deployment.
 
 **Known Limitations**:
-- Mock data only (no real database)
-- Single-region deployment
-- Basic authentication (no OAuth/JWT)
-
----
+- Uses mock data only (no real database integration).  
+- Single-region deployment (no multi-region failover).  
+- Simple API key auth (no OAuth/JWT support).
 
 ## Acknowledgments
 
-- Inspired by production-grade API design patterns
-- Built with Express.js and Redis
-- Containerized with Docker
-- Tested with Jest and Supertest
-
----
+- Built using **Express.js** (Node.js web framework) and **Redis** for caching.  
+- Containerized with **Docker** for consistency and portability.  
+- Inspired by production-grade backend patterns and API design best practices.  
+- Testing powered by **Jest** and **Supertest**.  
 
 ## Contact
 
-**Author**: Akash Sai  
-**Email**: your.email@example.com  
-**GitHub**: https://github.com/yourusername/analytics-api
+- **Author**: Akash Sai  
+- **Email**: your.email@example.com  
+- **GitHub**: [Akashkallepalli/Analytics-api](https://github.com/Akashkallepalli/Analytics-api) (this repository)
+
+Feel free to reach out with questions or contributions!  
+
