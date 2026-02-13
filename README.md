@@ -593,8 +593,8 @@ If you encounter any issues or have questions:
 
 ## Contact
 
-- **Author**: Akash Sai  
-- **Email**: your.email@example.com  
+- **Author**: Akash Sai Ganesh Govind 
+- **Email**: 23mh1a1220@acoe.edu.in  
 - **GitHub**: [Akashkallepalli/Analytics-api](https://github.com/Akashkallepalli/Analytics-api) (this repository)
 
 Feel free to reach out with questions or contributions!  
