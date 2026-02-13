@@ -82,6 +82,7 @@ describe('Cache Service - Unit Tests', () => {
       const hourly = await redisClient.exists('metrics:hourly:default');
       const other = await redisClient.exists('other:key');
       
+      // 
       expect(daily).toBe(0);
       expect(hourly).toBe(0);
       expect(other).toBe(1);
