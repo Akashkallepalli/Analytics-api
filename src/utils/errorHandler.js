@@ -27,6 +27,7 @@ function errorHandler(err, req, res, next) {
       success: false,
       error: {
         message: err.message,
+        // statusCode: 400
         statusCode: 400
       }
     });
