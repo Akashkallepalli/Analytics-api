@@ -35,6 +35,7 @@ function rateLimitMiddleware(redisClient) {
           success: false,
           error: {
             message: 'Too Many Requests',
+            
             statusCode: 429,
             retryAfter: ttl
           }
